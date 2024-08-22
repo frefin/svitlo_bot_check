@@ -33,11 +33,9 @@ class Kyiv(StatesGroup):
     vul = State()
     nom = State()
 
-
 class MyCallback(CallbackData, prefix='my'):
     name: str
     id: int
-
 
 def create_electrotime():
     builder = InlineKeyboardBuilder()
@@ -52,15 +50,13 @@ def create_electrotime():
     )
     return builder.as_markup()
 
-
-
 dp = Dispatcher()
-
 
 @dp.message(CommandStart())
 async def command_start_handler(message: Message) -> None:
     await message.answer(f"Привіт, {html.bold(message.from_user.full_name)}!\n"
                          f"Виберіть місто/область", reply_markup=create_electrotime())
+
 @dp.callback_query(MyCallback.filter(F.name == 'Kyiv'))
 async def kyiv_enegry(query: CallbackQuery, state: FSMContext):
     await state.set_state(Kyiv.vul)
@@ -89,11 +85,11 @@ async def kyiv_nom(message: Message, state: FSMContext):
     else:
         await message.answer("Введіть ще раз")
 
-
 @dp.callback_query(MyCallback.filter(F.name == 'Kharkiv'))
 async def kharkiv_enegry(query: CallbackQuery, state: FSMContext):
     await state.set_state(Kharkiv.position)
     await query.message.answer("Введіть населенний пункт/Місто")
+
 @dp.message(Kharkiv.position)
 async def kharkiv_pos(message: Message, state: FSMContext):
     await state.update_data(position=message.text)
@@ -104,8 +100,6 @@ async def kharkiv_pos(message: Message, state: FSMContext):
     else:
         await message.answer("Такого населеного пункту не існує!\n"
                              "Введіть ще раз!")
-
-
 
 vull = []
 @dp.message(Kharkiv.vul)
@@ -145,17 +139,12 @@ async def khrakiv_nom(message: Message, state: FSMContext):
     print(text)
     await message.answer(check(text))
 
-
-
-
-
 async def main() -> None:
     # Initialize Bot instance with default bot properties which will be passed to all API calls
     bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 
     # And the run events dispatching
     await dp.start_polling(bot)
-
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, stream=sys.stdout)
