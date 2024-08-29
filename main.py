@@ -13,17 +13,18 @@ from aiogram import Bot, Dispatcher, html, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.filters import CommandStart
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, FSInputFile
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.filters.callback_data import CallbackData
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
-from reques import check, check_misto_vul, check_kyiv, kyiv_done, list_kyiv_bud, get_id
+from reques import check, check_misto_vul, check_kyiv, kyiv_done, list_kyiv_bud, get_id, checck, dowload_pdf, page_to_img
 
 # Bot token can be obtained via https://t.me/BotFather
 TOKEN = '6861510096:AAEyv-Nq1guUYOri9ZuDMXFSpLoo6EXWmic'
 
 class Kharkiv(StatesGroup):
+    id = State()
     position = State()
     vul = State()
     nom = State()
@@ -33,9 +34,11 @@ class Kyiv(StatesGroup):
     vul = State()
     nom = State()
 
+
 class MyCallback(CallbackData, prefix='my'):
     name: str
     id: int
+
 
 def create_electrotime():
     builder = InlineKeyboardBuilder()
@@ -50,17 +53,26 @@ def create_electrotime():
     )
     return builder.as_markup()
 
+
+
 dp = Dispatcher()
+
 
 @dp.message(CommandStart())
 async def command_start_handler(message: Message) -> None:
     await message.answer(f"Привіт, {html.bold(message.from_user.full_name)}!\n"
                          f"Виберіть місто/область", reply_markup=create_electrotime())
-
 @dp.callback_query(MyCallback.filter(F.name == 'Kyiv'))
 async def kyiv_enegry(query: CallbackQuery, state: FSMContext):
-    await state.set_state(Kyiv.vul)
+    await state.set_state(Kyiv.id)
     await query.message.answer("Введіть вулицю")
+
+@dp.message(Kyiv.id)
+async def kyiv_id(message: Message, state: FSMContext):
+    await state.update_data(id=message.text)
+    choose = ', \n'.join(checck(message.text))
+    await message.answer(f"Виберіть: {choose}")
+    await state.set_state(Kyiv.vul)
 
 @dp.message(Kyiv.vul)
 async def kyiv_vul(message: Message, state: FSMContext):
@@ -75,31 +87,39 @@ async def kyiv_vul(message: Message, state: FSMContext):
     else:
         await message.answer("Введіть ще раз")
 
+
 @dp.message(Kyiv.nom)
 async def kyiv_nom(message: Message, state: FSMContext):
     data = await state.get_data()
     if message.text in list_kyiv_bud(check_kyiv(data['vul'])):
-        await state.update_data(nom=message.text)
-        await message.answer(kyiv_done(
-            f'https://api.yasno.com.ua/api/v1/electricity-outages-schedule/houses?region=kiev&street_id={message.text}'))
+        c = f'https://api.yasno.com.ua/api/v1/electricity-outages-schedule/houses?region=kiev&street_id={check_kyiv(data['vul'])}'
+        await message.answer('Черга - '+str(kyiv_done(
+            c)))
+        dowload_pdf(f"https://yasno.com.ua/files/schedules/kyiv/Schedule.Kyiv.Group{kyiv_done(c)}.pdf", kyiv_done(c))
+        page_to_img(kyiv_done(c))
+        photo = 'grafik_0_num.jpg'
+        await message.answer_photo(FSInputFile(path=photo))
     else:
         await message.answer("Введіть ще раз")
+
 
 @dp.callback_query(MyCallback.filter(F.name == 'Kharkiv'))
 async def kharkiv_enegry(query: CallbackQuery, state: FSMContext):
     await state.set_state(Kharkiv.position)
     await query.message.answer("Введіть населенний пункт/Місто")
-
 @dp.message(Kharkiv.position)
 async def kharkiv_pos(message: Message, state: FSMContext):
     await state.update_data(position=message.text)
     responce = requests.get(f'https://kharkiv.energy-ua.info/select/{message.text}/')
     if responce.status_code == 200:
-        await state.set_state(Kharkiv.vul)
+        await state.set_state(Kharkiv.id)
         await message.answer("Введіть назву вулиці")
     else:
         await message.answer("Такого населеного пункту не існує!\n"
                              "Введіть ще раз!")
+# @dp.message(Kharkiv.id)
+
+
 
 vull = []
 @dp.message(Kharkiv.vul)
@@ -139,12 +159,17 @@ async def khrakiv_nom(message: Message, state: FSMContext):
     print(text)
     await message.answer(check(text))
 
+
+
+
+
 async def main() -> None:
     # Initialize Bot instance with default bot properties which will be passed to all API calls
     bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 
     # And the run events dispatching
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, stream=sys.stdout)
